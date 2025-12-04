@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 
 // VULNERABILITY 1: Weak secret key
-const JWT_SECRET = 'weaksecret123'; // Harusnya disimpan di .env dan complex
+const JWT_SECRET = process.env.JWT_SECRET
 
 // VULNERABILITY 2: No token expiration check
 const generateToken = (user) => {

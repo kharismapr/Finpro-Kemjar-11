@@ -98,7 +98,7 @@ export default function Layout({ children, authenticated = false }: LayoutProps)
                     onClick={handleAdminClick}
                     className="text-sm font-medium text-foreground/70 hover:text-primary transition-colors"
                   >
-                    Answers
+                    Secret
                   </button>
 
                   {/* Logout */}

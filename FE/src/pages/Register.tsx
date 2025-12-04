@@ -4,9 +4,10 @@ import { Wand2, Star } from "lucide-react";
 import { authAPI } from "../lib/api";
 import { useAuth } from "../contexts/AuthContext";
 
-export default function Login() {
+export default function Register() {
   const navigate = useNavigate();
   const { login } = useAuth();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,11 +19,16 @@ export default function Login() {
     setError("");
 
     try {
-      const response = await authAPI.login({ email, password });
+      const response = await authAPI.register({
+        name,
+        email,
+        password,
+        role: "user",
+      });
       login(response.user, response.token);
       navigate("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
       setLoading(false);
     }
@@ -45,14 +51,13 @@ export default function Login() {
             />
           ))}
         </div>
-
       </div>
 
       {/* Decorative glow elements */}
       <div className="fixed top-0 right-0 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl pointer-events-none" />
       <div className="fixed bottom-0 left-0 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Login Container */}
+      {/* Register Container */}
       <div className="relative z-10 w-full max-w-md mx-auto px-4">
         {/* Header */}
         <div className="text-center mb-8">
@@ -64,10 +69,10 @@ export default function Login() {
             </div>
           </div>
           <h1 className="text-4xl font-bold mb-2 glow-golden">Akal-Akalan Quiz</h1>
-          <p className="text-foreground/60 text-lg">Lebih baik pulang kami akan menang, asal jangan menangis semalam</p>
+          <p className="text-foreground/60 text-lg">Daftar dan mulai bermain sekarang!</p>
         </div>
 
-        {/* Login Card */}
+        {/* Register Card */}
         <div className="card-glow rounded-xl p-8 backdrop-blur-xl">
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
@@ -75,7 +80,24 @@ export default function Login() {
                 <p className="text-sm text-red-400">{error}</p>
               </div>
             )}
-            
+
+            {/* Name Input */}
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-foreground mb-2">
+                Full Name
+              </label>
+              <input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Enter your full name"
+                className="w-full px-4 py-3 rounded-lg bg-input border border-purple-500/30 text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                required
+                disabled={loading}
+              />
+            </div>
+
             {/* Email Input */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-foreground mb-2">
@@ -117,26 +139,19 @@ export default function Login() {
               className="w-full py-3 px-4 rounded-lg bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-bold transition-all hover:shadow-lg hover:shadow-primary/50 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Wand2 className="w-4 h-4" />
-              {loading ? "Loading..." : "Enter the Quiz"}
+              {loading ? "Loading..." : "Create Account"}
             </button>
           </form>
 
-          {/* Demo credentials hint
-          <div className="mt-6 pt-6 border-t border-purple-500/20">
-            <p className="text-center text-sm text-foreground/50 mb-3">Demo Credentials:</p>
-            <p className="text-center text-xs text-foreground/40 mb-1">Email: <span className="text-primary">any@email.com</span></p>
-            <p className="text-center text-xs text-foreground/40">Password: <span className="text-primary">any</span></p>
-          </div> */}
-        </div>
-
-        {/* Register Link */}
-        <div className="mt-6 text-center">
-          <p className="text-sm text-foreground/60">
-            Don't have an account?{" "}
-            <Link to="/register" className="text-primary hover:text-primary/80 font-semibold transition-colors">
-              Register here
-            </Link>
-          </p>
+          {/* Login Link */}
+          <div className="mt-6 pt-6 border-t border-purple-500/20 text-center">
+            <p className="text-sm text-foreground/60">
+              Already have an account?{" "}
+              <Link to="/login" className="text-primary hover:text-primary/80 font-semibold transition-colors">
+                Login here
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>

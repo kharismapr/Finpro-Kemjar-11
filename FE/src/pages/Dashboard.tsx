@@ -1,59 +1,66 @@
-import { useState } from "react";
-import { ChevronLeft, ChevronRight, Trophy, Star, Sparkles } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ChevronLeft, ChevronRight, Trophy } from "lucide-react";
 import { cn } from "../lib/utils";
-
-interface QuizQuestion {
-  id: number;
-  question: string;
-  options: string[];
-  correct: number;
-}
-
-const QUIZ_QUESTIONS: QuizQuestion[] = [
-  {
-    id: 1,
-    question: "Dalam konteks Sistem Waktu Diskrit, apa syarat mutlak agar sebuah sistem Linear Time-Invariant atau LTI dikatakan stabil secara BIBO jika dilihat dari Region of Convergence atau ROC pada Transformasi Z?",
-    options: ["Wilayah konvergensi atau ROC harus mencakup lingkaran satuan pada bidang kompleks.", "Wilayah konvergensi harus meluas ke luar menjauhi titik pusat hingga tak hingga.", "Semua pole atau kutub sistem harus berada tepat di sumbu imajiner vertikal", "Sistem harus memiliki jumlah pole yang lebih sedikit daripada jumlah zero."],
-    correct: 0,
-  },
-  {
-    id: 2,
-    question: "Anda memiliki sebuah matriks real sembarang, lalu Anda mengalikannya dengan transpos dari matriks itu sendiri (Matriks Transpos dikali Matriks Asli), sifat apa yang PASTI dimiliki oleh nilai-nilai eigen dari matriks hasil perkalian tersebut?",
-    options: ["Nilai eigennya pasti sama persis dengan nilai singular dari matriks aslinya", "Semua nilai eigen pasti berupa bilangan real yang tidak negatif (nol atau positif).", "Semua nilai eigen pasti berupa bilangan imajiner murni.", "Nilai eigennya pasti saling berkebalikan satu sama lain."],
-    correct: 1,
-  },
-  {
-    id: 3,
-    question: "Tahun berapa Teknik Komputer UI didirikan",
-    options: ["1987", "1986", "2004", "2006"],
-    correct: 3,
-  },
-];
+import { useAuth } from "../contexts/AuthContext";
+import { quizAPI } from "../lib/api";
+import type { Question } from "../lib/api";
 
 const PRIZES = [
   { place: 1, reward: "💰 Grand Prize", points: "$2,500 USD", color: "from-yellow-400 to-yellow-600" },
 ];
 
 export default function Dashboard() {
+  const { token } = useAuth();
   const [showQuiz, setShowQuiz] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [selectedAnswers, setSelectedAnswers] = useState<(number | null)[]>([null, null, null]);
-  const [answered, setAnswered] = useState<boolean[]>([false, false, false]);
+  const [selectedAnswers, setSelectedAnswers] = useState<(string | null)[]>([]);
+  const [answered, setAnswered] = useState<boolean[]>([]);
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [score, setScore] = useState(0);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const handleAnswer = (optionIndex: number) => {
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      try {
+        if (!token) return;
+        const data = await quizAPI.getQuestions(token);
+        setQuestions(data);
+        setSelectedAnswers(new Array(data.length).fill(null));
+        setAnswered(new Array(data.length).fill(false));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to fetch questions");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchQuestions();
+  }, [token]);
+
+  const handleAnswer = async (optionIndex: number) => {
+    const selectedOption = questions[currentQuestion]?.options[optionIndex];
     const newAnswers = [...selectedAnswers];
-    newAnswers[currentQuestion] = optionIndex;
+    newAnswers[currentQuestion] = selectedOption;
     setSelectedAnswers(newAnswers);
 
     const newAnswered = [...answered];
     newAnswered[currentQuestion] = true;
     setAnswered(newAnswered);
+
+    // Submit answer to backend
+    if (token && questions[currentQuestion]) {
+      try {
+        await quizAPI.submitAnswer(token, questions[currentQuestion].id, selectedOption);
+      } catch (err) {
+        console.error("Failed to submit answer:", err);
+      }
+    }
   };
 
   const handleNext = () => {
-    if (currentQuestion < QUIZ_QUESTIONS.length - 1) {
+    if (currentQuestion < questions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
     } else {
       completeQuiz();
@@ -66,25 +73,71 @@ export default function Dashboard() {
     }
   };
 
-  const completeQuiz = () => {
-    let correctCount = 0;
-    selectedAnswers.forEach((answer, index) => {
-      if (answer === QUIZ_QUESTIONS[index].correct) {
-        correctCount++;
-      }
-    });
-    setScore(correctCount);
+  const completeQuiz = async () => {
+    if (!token) {
+      setQuizCompleted(true);
+      return;
+    }
+
+    try {
+      // Fetch score dari backend
+      const results = await quizAPI.getMyAnswers(token);
+
+      // Backend mengembalikan array answer dengan field score
+      // Contoh: [{ score: 1 }, { score: 0 }, ...]
+      const totalScore = results.reduce(
+        (sum: number, ans: any) => sum + (ans.score || 0),
+        0
+      );
+
+      setScore(totalScore);
+    } catch (err) {
+      console.error("Failed to fetch backend score:", err);
+
+      const results = await quizAPI.getMyAnswers(token);
+      const totalScore = results.reduce((sum, r) => sum + (r.score || 0), 0);
+      setScore(totalScore);
+
+    }
+
     setQuizCompleted(true);
   };
+
 
   const resetQuiz = () => {
     setShowQuiz(false);
     setCurrentQuestion(0);
-    setSelectedAnswers([null, null, null]);
-    setAnswered([false, false, false]);
+    setSelectedAnswers(new Array(questions.length).fill(null));
+    setAnswered(new Array(questions.length).fill(false));
     setQuizCompleted(false);
     setScore(0);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen pt-20 pb-12 px-4 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-foreground/70 text-lg">Loading questions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen pt-20 pb-12 px-4 flex items-center justify-center">
+        <div className="card-glow rounded-2xl p-8 backdrop-blur-xl text-center max-w-md">
+          <p className="text-red-400">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-6 py-2 rounded-lg bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (showQuiz) {
     if (quizCompleted) {
@@ -98,19 +151,21 @@ export default function Dashboard() {
                   <Trophy className="w-10 h-10 text-primary" />
                 </div>
                 <h1 className="text-4xl font-bold glow-golden mb-2">Quiz Complete!</h1>
-                <p className="text-foreground/70 text-lg">You answered {score} out of {QUIZ_QUESTIONS.length} questions correctly</p>
+                <p className="text-foreground/70 text-lg">You answered {score} out of 20 points</p>
 
-                {score < QUIZ_QUESTIONS.length && (
-                  <div className="mt-6 p-4 rounded-lg bg-red-500/10 border border-red-500/50">
-                    <p className="text-xl font-semibold text-red-400">❌ You failed to get the Grand Prize</p>
-                    <p className="text-sm text-red-300 mt-2">You need to answer all {QUIZ_QUESTIONS.length} questions correctly to win the $2,500 USD Grand Prize!</p>
+                {score === 20 && (
+                  <div className="mt-6 p-6 rounded-lg bg-gradient-to-br from-yellow-500/20 to-yellow-400/10 border-2 border-yellow-500/50">
+                    <p className="text-2xl font-bold text-yellow-400 mb-2">🎉 Congrats! 🎉</p>
+                    <p className="text-lg font-semibold text-yellow-300">Kamu dapat Grand Prize!</p>
+                    <p className="text-sm text-yellow-300/80 mt-3">Perfect score! Amazing job, Genius! 💰</p>
                   </div>
                 )}
 
-                {score === QUIZ_QUESTIONS.length && (
-                  <div className="mt-6 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/50">
-                    <p className="text-xl font-semibold text-emerald-400">✨ Congratulations! You Won the Grand Prize! ✨</p>
-                    <p className="text-sm text-emerald-300 mt-2">Collect your $2,500 USD reward!</p>
+                {score < 20 && (
+                  <div className="mt-6 p-6 rounded-lg bg-gradient-to-br from-blue-500/20 to-blue-400/10 border-2 border-blue-500/50">
+                    <p className="text-2xl font-bold text-blue-400 mb-2">💪 Nice Try! 💪</p>
+                    <p className="text-lg font-semibold text-blue-300">Coba lain kali!</p>
+                    <p className="text-sm text-blue-300/80 mt-3">Keep practicing and you'll get the grand prize next time! 🚀</p>
                   </div>
                 )}
               </div>
@@ -120,9 +175,9 @@ export default function Dashboard() {
                 <div className="relative inline-block">
                   <div className="absolute inset-0 bg-gradient-to-r from-primary to-secondary rounded-lg blur-lg opacity-50" />
                   <div className="relative bg-card border-2 border-primary/50 rounded-lg px-12 py-6">
-                    <p className="text-foreground/70 text-sm mb-1">Your Score</p>
-                    <p className="text-5xl font-bold glow-golden">{score * 100 + (3 - score) * 0}</p>
-                    <p className="text-foreground/70 text-sm mt-2">out of {QUIZ_QUESTIONS.length * 100}</p>
+                    <p className="text-foreground/70 text-sm mb-1">Answers Submitted</p>
+                    <p className="text-5xl font-bold glow-golden">{score}</p>
+                    <p className="text-foreground/70 text-sm mt-2">out of {questions.length}</p>
                   </div>
                 </div>
               </div>
@@ -147,7 +202,7 @@ export default function Dashboard() {
           <div className="mb-8">
             <div className="flex justify-between items-center mb-3">
               <span className="text-sm font-semibold text-primary">
-                Question {currentQuestion + 1} of {QUIZ_QUESTIONS.length}
+                Question {currentQuestion + 1} of {questions.length}
               </span>
               <span className="text-sm text-foreground/60">
                 {answered.filter(Boolean).length} answered
@@ -156,7 +211,7 @@ export default function Dashboard() {
             <div className="h-2 bg-muted rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-primary to-secondary transition-all duration-300"
-                style={{ width: `${((currentQuestion + 1) / QUIZ_QUESTIONS.length) * 100}%` }}
+                style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
               />
             </div>
           </div>
@@ -164,18 +219,18 @@ export default function Dashboard() {
           {/* Question Card */}
           <div className="card-glow rounded-2xl p-8 backdrop-blur-xl mb-8">
             <h2 className="text-2xl font-bold text-foreground mb-8">
-              {QUIZ_QUESTIONS[currentQuestion].question}
+              {questions[currentQuestion]?.question}
             </h2>
 
             {/* Options */}
             <div className="space-y-4 mb-8">
-              {QUIZ_QUESTIONS[currentQuestion].options.map((option, index) => (
+              {questions[currentQuestion]?.options.map((option: string, index: number) => (
                 <button
                   key={index}
                   onClick={() => handleAnswer(index)}
                   className={cn(
                     "w-full p-4 rounded-lg border-2 transition-all text-left font-medium",
-                    selectedAnswers[currentQuestion] === index
+                    selectedAnswers[currentQuestion] === option
                       ? "border-primary bg-primary/20 text-primary"
                       : "border-purple-500/30 bg-purple-500/5 text-foreground hover:border-primary/50 hover:bg-primary/10"
                   )}
@@ -184,12 +239,12 @@ export default function Dashboard() {
                     <div
                       className={cn(
                         "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
-                        selectedAnswers[currentQuestion] === index
+                        selectedAnswers[currentQuestion] === option
                           ? "border-primary bg-primary"
                           : "border-foreground/30"
                       )}
                     >
-                      {selectedAnswers[currentQuestion] === index && (
+                      {selectedAnswers[currentQuestion] === option && (
                         <div className="w-2 h-2 bg-primary-foreground rounded-full" />
                       )}
                     </div>
@@ -215,7 +270,7 @@ export default function Dashboard() {
                 disabled={selectedAnswers[currentQuestion] === null}
                 className="flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold hover:shadow-lg hover:shadow-primary/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
-                {currentQuestion === QUIZ_QUESTIONS.length - 1 ? "Complete" : "Next"}
+                {currentQuestion === questions.length - 1 ? "Complete" : "Next"}
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -273,7 +328,7 @@ export default function Dashboard() {
                 Ready for the Challenge?
               </h3>
               <p className="text-foreground/70 mb-8 text-lg">
-                Test your impressive knowledge with our 3-question quiz. Will you claim the ultimate prize?
+                Test your impressive knowledge with our question quiz. Will you claim the ultimate prize?
               </p>
               <button
                 onClick={() => setShowQuiz(true)}
